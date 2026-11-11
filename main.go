@@ -34,35 +34,12 @@ var regEAMod10 = []string{
 }
 
 type regObj struct {
-	Dest string
-	Val  string
+	Reg string
+	Val string
 }
 
 var regArr = []regObj{}
 var registerState = ""
-
-func regSet(dest, val string) {
-	for i := range regArr {
-		if regArr[i].Dest == dest {
-			regArr[i].Val = val
-			return
-		}
-	}
-	regArr = append(regArr, regObj{Dest: dest, Val: val})
-}
-
-func regEntries(regDest, regSrc string, value string) {
-
-	if regSrc == "" {
-		regSet(regDest, value)
-	}
-	for i := len(regArr) - 1; i >= 0; i-- {
-		if regArr[i].Dest == regSrc {
-			regSet(regDest, regArr[i].Val)
-			return
-		}
-	}
-}
 
 func writeToFile(file *os.File, content string) {
 	_, err := file.WriteString(content)
@@ -244,7 +221,8 @@ func main() {
 	for _, reg := range regArr {
 		val, _ := strconv.Atoi(reg.Val)
 
-		registerState += fmt.Sprintf("%s: 0x%04x  (%s)\n", reg.Dest, uint16(val), reg.Val)
+		registerState += fmt.Sprintf("%s: 0x%04x  (%s)\n", reg.Reg, uint16(val), reg.Val)
 	}
+	log.Print(regArr)
 	log.Printf("Register state:\n%s", registerState)
 }
