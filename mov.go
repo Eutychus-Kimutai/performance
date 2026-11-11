@@ -25,7 +25,7 @@ func movImmediateReg(opcode byte, str []byte, i int, outputFile *os.File, mod by
 	}
 	log.Printf("MOV %s, %d", regmap[reg], value)
 	content = fmt.Sprintf("MOV %s, %d\n", regmap[reg], value)
-	regEntries(regmap[reg], "", fmt.Sprintf("%d", value))
+	regEntries(regmap[reg], "", fmt.Sprintf("%d", value), "MOV")
 	writeToFile(outputFile, content)
 	return 1 + immLength
 }
