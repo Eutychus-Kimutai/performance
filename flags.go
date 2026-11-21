@@ -6,6 +6,13 @@ import (
 	"strconv"
 )
 
+type Flags struct {
+	ZF string // Zero Flag
+	SF string // Sign Flag
+}
+
+var flags Flags
+
 func regSet(dest, val string) {
 	for i := range regArr {
 		if regArr[i].Reg == dest {
@@ -25,6 +32,9 @@ func regGet(reg string) string {
 }
 
 func regEntries(regDest, regSrc, value, spec string) {
+	if !simulate {
+		return
+	}
 	if regDest == "" {
 		return
 	}
@@ -62,13 +72,15 @@ func regEntriesWithFlags(result int, spec string) {
 	// After each arithmetic instruction, ZF is set to 1 if the result is zero, and 0 if the result is non-zero
 	// SF is set to 1 is the high bit of the result is 1, and 0 if it is zero.
 	r := uint16(result)
-	zf := "0"
+	flags.ZF = "0"
+	flags.SF = "0"
 	if r == 0 {
-		zf = "1"
+		flags.ZF = "1"
+		flags.SF = "0"
 	}
-	sf := "0"
 	if r>>15 != 0 {
-		sf = "1"
+		flags.SF = "1"
+		flags.ZF = "0"
 	}
-	log.Printf("Flags after %s: ZF=%s, SF=%s", spec, zf, sf)
+	log.Printf("zf: %s, sf: %s", flags.ZF, flags.SF)
 }

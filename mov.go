@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 )
 
 func movImmediateReg(opcode byte, str []byte, i int, outputFile *os.File, mod byte) int {
-	content := ""
 	regmap := []string{}
 	if opcode >= 0xb8 {
 		regmap = regW1
@@ -23,9 +21,7 @@ func movImmediateReg(opcode byte, str []byte, i int, outputFile *os.File, mod by
 	} else {
 		value = int16(str[i+1])
 	}
-	log.Printf("MOV %s, %d", regmap[reg], value)
-	content = fmt.Sprintf("MOV %s, %d\n", regmap[reg], value)
 	regEntries(regmap[reg], "", fmt.Sprintf("%d", value), "MOV")
-	writeToFile(outputFile, content)
+	write(outputFile, "MOV %s, %d", regmap[reg], value)
 	return 1 + immLength
 }
