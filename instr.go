@@ -12,9 +12,12 @@ type instructionSpec struct {
 }
 
 func write(outputFile *os.File, content string, args ...any) {
+	if !emit {
+		return
+	}
 	line := fmt.Sprintf(content, args...)
 	log.Print(line)
-	outputFile.WriteString(content + "\n")
+	outputFile.WriteString(line + "\n")
 }
 
 func regMapFor(w byte) []string {
@@ -49,10 +52,10 @@ func regMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 		// Register to Register
 		if d == 0 {
 			write(outputFile, "%s %s, %s", spec.name, regmap[rm], regmap[reg])
-			regEntries(regmap[rm], regmap[reg], "")
+			regEntries(regmap[rm], regmap[reg], "", spec.name)
 		} else {
 			write(outputFile, "%s %s, %s", spec.name, regmap[reg], regmap[rm])
-			regEntries(regmap[reg], regmap[rm], "")
+			regEntries(regmap[reg], regmap[rm], "", spec.name)
 		}
 	case 0x00:
 		if spec.dirAccess && rm == 0x06 {
@@ -60,20 +63,20 @@ func regMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 			addr := int16(str[i+2]) | int16(str[i+3])<<8
 			if d == 0 {
 				write(outputFile, "%s [%d], %s", spec.name, addr, regmap[reg])
-				regEntries("", fmt.Sprintf("[%d]", addr), regmap[reg])
+				regEntries("", fmt.Sprintf("[%d]", addr), regmap[reg], spec.name)
 			} else {
 				write(outputFile, "%s %s, [%d]", spec.name, regmap[reg], addr)
-				regEntries(regmap[reg], fmt.Sprintf("[%d]", addr), "")
+				regEntries(regmap[reg], fmt.Sprintf("[%d]", addr), "", spec.name)
 			}
 			n += 2 // Additional bytes for direct address
 		}
 		// Memory access through effective address
 		if d == 0 {
 			write(outputFile, "%s [%s], %s", spec.name, regEA[rm], regmap[reg])
-			regEntries("", regEA[rm], regmap[reg])
+			regEntries("", regEA[rm], regmap[reg], spec.name)
 		} else {
 			write(outputFile, "%s %s, [%s]", spec.name, regmap[reg], regEA[rm])
-			regEntries(regmap[reg], regEA[rm], "")
+			regEntries(regmap[reg], regEA[rm], "", spec.name)
 		}
 	case 0x01:
 		// Memory access with 8-bit displacement
@@ -81,10 +84,10 @@ func regMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 		var regEAmap = regEAMod01
 		if d == 0 {
 			write(outputFile, "%s [%s + %d], %s", spec.name, regEAmap[rm], disp, regmap[reg])
-			regEntries("", fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), regmap[reg])
+			regEntries("", fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), regmap[reg], spec.name)
 		} else {
 			write(outputFile, "%s %s, [%s + %d]", spec.name, regmap[reg], regEAmap[rm], disp)
-			regEntries(regmap[reg], fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), "")
+			regEntries(regmap[reg], fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), "", spec.name)
 		}
 	case 0x02:
 		// Memory access with 16-bit displacement
@@ -92,10 +95,10 @@ func regMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 		var regEAmap = regEAMod10
 		if d == 0 {
 			write(outputFile, "%s [%s + %d], %s", spec.name, regEAmap[rm], disp, regmap[reg])
-			regEntries("", fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), regmap[reg])
+			regEntries("", fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), regmap[reg], spec.name)
 		} else {
 			write(outputFile, "%s %s, [%s + %d]", spec.name, regmap[reg], regEAmap[rm], disp)
-			regEntries(regmap[reg], fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), "")
+			regEntries(regmap[reg], fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), "", spec.name)
 		}
 	default:
 		log.Printf("Unsupported mod value: %d", mod)
@@ -106,61 +109,43 @@ func regMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 func immRegMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, outputFile *os.File, reg, rm, d, mod byte, regmap []string) int {
 	immSize := immediateSize(opcode)
 	immOffset := i + 1 + modrmsize(mod, rm)
-	value := readImm(str, immOffset, immSize)
+	immStr := readImm(str, immOffset, immSize)
+	if opcode == 0x83 {
+		immStr = int16(int8(str[immOffset]))
+	}
+	value := immStr
 
 	switch mod {
 	case 0x03:
 		// Register to Register
-		if d == 0 {
-			write(outputFile, "%s %s, %d", spec.name, regmap[rm], value)
-			regEntries(regmap[rm], "", fmt.Sprintf("%d", value))
-		} else {
-			write(outputFile, "%s %s, %d", spec.name, regmap[reg], value)
-			regEntries(regmap[reg], "", fmt.Sprintf("%d", value))
-		}
+		dest := regmap[rm]
+		write(outputFile, "%s %s, %d", spec.name, dest, value)
+		regEntries(dest, "", fmt.Sprintf("%d", value), spec.name)
 	case 0x00:
-		if spec.dirAccess && rm == 0x06 {
+		if rm == 0x06 {
 			// Direct memory access
 			addr := int16(str[i+2]) | int16(str[i+3])<<8
-			if d == 0 {
-				write(outputFile, "%s [%d], %d", spec.name, addr, value)
-				regEntries("", fmt.Sprintf("[%d]", addr), fmt.Sprintf("%d", value))
-			} else {
-				write(outputFile, "%s %d, [%d]", spec.name, value, addr)
-				regEntries(fmt.Sprintf("%d", value), fmt.Sprintf("[%d]", addr), "")
-			}
+			dest := fmt.Sprintf("[%d]", addr)
+			write(outputFile, "%s %s, %d", spec.name, dest, value)
+			regEntries("", dest, fmt.Sprintf("%d", value), spec.name)
 			return 1 + modrmsize(mod, rm) + immSize + 2 // Additional bytes for direct address
 		}
-		if d == 0 {
-			write(outputFile, "%s [%s], %d", spec.name, regEA[rm], value)
-			regEntries("", regEA[rm], fmt.Sprintf("%d", value))
-		} else {
-			write(outputFile, "%s %d, [%s]", spec.name, value, regEA[rm])
-			regEntries(fmt.Sprintf("%d", value), regEA[rm], "")
-		}
+		dest := fmt.Sprintf("[%s]", regEA[rm])
+		write(outputFile, "%s %s, %d", spec.name, dest, value)
+		regEntries("", dest, fmt.Sprintf("%d", value), spec.name)
 	case 0x01:
 		// Memory access with 8-bit displacement
 		disp := int16(int8(str[i+2]))
-		var regEAmap = regEAMod01
-		if d == 0 {
-			write(outputFile, "%s [%s + %d], %d", spec.name, regEAmap[rm], disp, value)
-			regEntries("", fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), fmt.Sprintf("%d", value))
-		} else {
-			write(outputFile, "%s %d, [%s + %d]", spec.name, value, regEAmap[rm], disp)
-			regEntries(fmt.Sprintf("%d", value), fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), "")
-		}
+		dest := fmt.Sprintf("[%s + %d]", regEAMod01[rm], disp)
+		write(outputFile, "%s %s, %d", spec.name, dest, value)
+		regEntries("", dest, fmt.Sprintf("%d", value), spec.name)
 
 	case 0x02:
 		// Memory access with 16-bit displacement
 		disp := int16(str[i+2]) | int16(str[i+3])<<8
-		var regEAmap = regEAMod10
-		if d == 0 {
-			write(outputFile, "%s [%s + %d], %d", spec.name, regEAmap[rm], disp, value)
-			regEntries("", fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), fmt.Sprintf("%d", value))
-		} else {
-			write(outputFile, "%s %d, [%s + %d]", spec.name, value, regEAmap[rm], disp)
-			regEntries(fmt.Sprintf("%d", value), fmt.Sprintf("[%s + %d]", regEAmap[rm], disp), "")
-		}
+		dest := fmt.Sprintf("[%s + %d]", regEAMod10[rm], disp)
+		write(outputFile, "%s %s, %d", spec.name, dest, value)
+		regEntries("", dest, fmt.Sprintf("%d", value), spec.name)
 	default:
 		log.Printf("Unsupported mod value: %d", mod)
 	}
@@ -178,10 +163,10 @@ func immRegInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 	}
 	if d == 0 {
 		write(outputFile, "%s %s, %d", spec.name, regmap[rm], value)
-		regEntries(regmap[rm], "", fmt.Sprintf("%d", value))
+		regEntries(regmap[rm], "", fmt.Sprintf("%d", value), spec.name)
 	} else {
 		write(outputFile, "%s %s, %d", spec.name, regmap[reg], value)
-		regEntries(regmap[reg], "", fmt.Sprintf("%d", value))
+		regEntries(regmap[reg], "", fmt.Sprintf("%d", value), spec.name)
 	}
 	return 1 + immLength
 }
