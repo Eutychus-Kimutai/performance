@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 )
 
 type Flags struct {
@@ -12,6 +13,42 @@ type Flags struct {
 }
 
 var flags Flags
+var memory = make(map[uint16]uint16)
+
+func evalAddr(s string) uint16 {
+	// parse [1000] or [BX+SI] or [BX+4]...etc
+	if s[0] != '[' || s[len(s)-1] != ']' {
+		log.Printf("Invalid memory address: %s", s)
+		return 0
+	}
+	//  resolving register parts via regGet and displacements via strconv.Atoi.
+	regPart := s[1 : len(s)-1]
+	if strings.Contains(regPart, "+") {
+		parts := strings.Split(regPart, "+")
+		addr := 0
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if val := regGet(part); val != "" {
+
+				intVal, _ := strconv.Atoi(val)
+				addr += intVal
+			} else {
+				intVal, _ := strconv.Atoi(part)
+				addr += intVal
+			}
+		}
+		return uint16(addr)
+	} else {
+		if val := regGet(regPart); val != "" {
+			intVal, _ := strconv.Atoi(val)
+			return uint16(intVal)
+		} else {
+			intVal, _ := strconv.Atoi(regPart)
+			return uint16(intVal)
+		}
+	}
+
+}
 
 func regSet(dest, val string) {
 	for i := range regArr {
@@ -35,12 +72,25 @@ func regEntries(regDest, regSrc, value, spec string) {
 	if !simulate {
 		return
 	}
+
+	memSrc := strings.HasPrefix(regSrc, "[") && strings.HasSuffix(regSrc, "]")
 	if regDest == "" {
-		return
+		if memSrc {
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				v, _ = strconv.Atoi(regGet(value))
+			}
+			memory[evalAddr(regSrc)] = uint16(v)
+			return
+		}
+
 	}
 	destVal := regGet(regDest)
+
 	srcVal := value
-	if regSrc != "" {
+	if memSrc {
+		srcVal = fmt.Sprintf("%d", memory[evalAddr(regSrc)])
+	} else if regSrc != "" {
 		srcVal = regGet(regSrc)
 	}
 	switch spec {

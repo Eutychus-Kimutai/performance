@@ -68,7 +68,7 @@ func regMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, out
 				write(outputFile, "%s %s, [%d]", spec.name, regmap[reg], addr)
 				regEntries(regmap[reg], fmt.Sprintf("[%d]", addr), "", spec.name)
 			}
-			n += 2 // Additional bytes for direct address
+			return n
 		}
 		// Memory access through effective address
 		if d == 0 {
@@ -128,7 +128,7 @@ func immRegMemInstruction(spec instructionSpec, opcode byte, str []byte, i int, 
 			dest := fmt.Sprintf("[%d]", addr)
 			write(outputFile, "%s %s, %d", spec.name, dest, value)
 			regEntries("", dest, fmt.Sprintf("%d", value), spec.name)
-			return 1 + modrmsize(mod, rm) + immSize + 2 // Additional bytes for direct address
+			return 1 + modrmsize(mod, rm) + immSize // Additional bytes for direct address
 		}
 		dest := fmt.Sprintf("[%s]", regEA[rm])
 		write(outputFile, "%s %s, %d", spec.name, dest, value)
